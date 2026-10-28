@@ -1,0 +1,665 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#16141f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="MemeCloud">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>😂</text></svg>">
+<title>MemeCloud</title>
+<style>
+  :root{
+    --bg:#16141f; --card:#221f2e; --card2:#2b2740; --text:#f3f0ff; --muted:#9a94b3;
+    --accent:#ffcc33; --danger:#ff6b6b; --line:#332f45;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  body{min-height:100dvh;padding-bottom:110px}
+  button{font-family:inherit;cursor:pointer}
+
+  header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:4px;
+    padding:calc(10px + env(safe-area-inset-top)) 12px 10px;
+    background:rgba(22,20,31,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  header h1{font-size:20px;margin:0 4px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .iconbtn{background:none;border:0;color:var(--text);font-size:22px;width:42px;height:42px;border-radius:12px}
+  .iconbtn:active{background:var(--card)}
+  .spin{animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  [hidden]{display:none!important}
+
+  main{padding:16px}
+
+  /* Word Cloud */
+  .cloud{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;align-content:center;
+    gap:6px 14px;min-height:calc(100dvh - 200px)}
+  .tag{background:none;border:0;line-height:1.05;padding:4px 6px;border-radius:10px;transition:transform .1s}
+  .tag:active{transform:scale(.92)}
+  .tag small{font-size:.4em;opacity:.55;font-weight:600;margin-left:3px;vertical-align:super;color:var(--text)}
+
+  /* Bilder-Cloud */
+  .imgcloud{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;align-content:center;
+    gap:8px;min-height:calc(100dvh - 200px)}
+  .tile{position:relative;padding:0;border:0;border-radius:14px;overflow:hidden;background:var(--card);
+    flex:none;transition:transform .1s}
+  .tile:active{transform:scale(.96)}
+  .tile img{width:100%;height:100%;object-fit:cover;display:block}
+  .tile.top{box-shadow:0 0 0 3px var(--accent)}
+  .badge{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.7);color:#fff;font-size:12px;
+    padding:2px 7px;border-radius:999px;font-weight:700}
+
+  .empty{text-align:center;color:var(--muted);margin-top:24vh;padding:0 24px;line-height:1.6}
+  .empty .btn{margin-top:16px;max-width:280px}
+
+  /* Willkommen */
+  .welcome{max-width:420px;margin:12vh auto 0;text-align:center;line-height:1.55}
+  .welcome .big{font-size:72px}
+  .welcome h2{margin:8px 0}
+  .welcome p{color:var(--muted)}
+  .check{display:flex;align-items:center;justify-content:center;gap:8px;color:var(--text);font-size:15px;margin:22px 0 14px}
+  .check input{width:20px;height:20px;accent-color:var(--accent)}
+
+  .fab{position:fixed;right:20px;bottom:calc(20px + env(safe-area-inset-bottom));width:62px;height:62px;
+    border-radius:50%;border:0;background:var(--accent);color:#1a1500;font-size:34px;font-weight:700;
+    box-shadow:0 6px 20px rgba(0,0,0,.45);z-index:6;line-height:1}
+  .fab:active{transform:scale(.94)}
+
+  .toast{position:fixed;left:16px;right:96px;bottom:calc(28px + env(safe-area-inset-bottom));z-index:20;
+    background:#000;color:#fff;border:1px solid var(--line);padding:12px 14px;border-radius:12px;font-size:14px;
+    line-height:1.4;box-shadow:0 6px 20px rgba(0,0,0,.5)}
+
+  /* Overlays */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;z-index:10}
+  .overlay.open{display:flex}
+  .overlay.bottom{align-items:flex-end;justify-content:center}
+  .overlay.center{align-items:center;justify-content:center;padding:16px}
+  .sheet{background:var(--card);width:100%;max-width:520px;border-radius:22px 22px 0 0;
+    padding:20px 16px calc(20px + env(safe-area-inset-bottom));max-height:92dvh;overflow:auto}
+  .sheet h2{margin:0 0 14px;font-size:18px}
+  label{display:block;font-size:13px;color:var(--muted);margin:12px 0 6px}
+  input[type=text],input[type=url]{width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);
+    background:var(--bg);color:var(--text);font-size:16px}
+  .seg{display:flex;background:var(--bg);border-radius:12px;padding:4px;gap:4px}
+  .seg button{flex:1;border:0;padding:10px;border-radius:9px;background:none;color:var(--muted);font-size:15px}
+  .seg button.on{background:var(--card2);color:var(--text);font-weight:600}
+  .pick{width:100%;padding:16px;border:2px dashed var(--line);border-radius:12px;background:none;
+    color:var(--muted);font-size:15px}
+  .preview{display:block;max-width:100%;max-height:40dvh;margin:12px auto 0;border-radius:12px}
+  .hint{color:var(--danger);font-size:13px;margin-top:8px;min-height:1em}
+  .row{display:flex;gap:10px;margin-top:18px}
+  .btn{flex:1;width:100%;padding:14px;border-radius:12px;border:0;font-size:16px;font-weight:600}
+  .btn.primary{background:var(--accent);color:#1a1500}
+  .btn.ghost{background:var(--card2);color:var(--text)}
+  .btn:disabled{opacity:.4}
+  .menuitem{display:block;width:100%;text-align:left;padding:14px;border:0;border-radius:12px;
+    background:var(--card2);color:var(--text);font-size:16px;margin-bottom:8px}
+  .note{color:var(--muted);font-size:13px;line-height:1.5;margin-top:10px}
+  code{background:var(--bg);padding:2px 6px;border-radius:6px;font-size:13px;word-break:break-all}
+
+  /* Detail */
+  .detail{background:var(--card);border-radius:20px;padding:12px;width:100%;max-width:520px;
+    max-height:94dvh;display:flex;flex-direction:column;gap:12px}
+  .detail img{width:100%;max-height:62dvh;object-fit:contain;border-radius:12px;background:#000}
+  .reacts{display:flex;gap:10px}
+  .react{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;padding:12px;border:2px solid transparent;
+    border-radius:14px;background:var(--card2);color:var(--text);font-size:28px}
+  .react span{font-size:18px;font-weight:700}
+  .react.chosen{border-color:var(--accent)}
+  .react:disabled:not(.chosen){opacity:.45}
+  .react.bump{animation:bump .25s}
+  @keyframes bump{50%{transform:scale(1.12)}}
+  .detailfoot{display:flex;justify-content:space-between;align-items:center}
+  .link{background:none;border:0;color:var(--muted);font-size:14px;padding:8px}
+  .link.danger{color:var(--danger)}
+</style>
+</head>
+<body>
+
+<header>
+  <button class="iconbtn" id="backBtn" aria-label="Zurück" hidden>←</button>
+  <h1 id="title">MemeCloud</h1>
+  <button class="iconbtn" id="refreshBtn" aria-label="Neu laden" hidden>↻</button>
+  <button class="iconbtn" id="menuBtn" aria-label="Menü" hidden>⋯</button>
+</header>
+
+<main id="main"></main>
+
+<button class="fab" id="addBtn" aria-label="Meme posten" hidden>+</button>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<!-- Posten -->
+<div class="overlay bottom" id="postOv">
+  <div class="sheet">
+    <h2>Meme posten</h2>
+    <label for="tagInput">Tag / Kategorie</label>
+    <input type="text" id="tagInput" list="tagList" placeholder="z.B. Montag" maxlength="40" autocomplete="off" enterkeyhint="done">
+    <datalist id="tagList"></datalist>
+
+    <label>Bild</label>
+    <div class="seg">
+      <button id="segFile" class="on">📷 Foto</button>
+      <button id="segUrl">🔗 Link</button>
+    </div>
+    <div id="fileBox" style="margin-top:10px">
+      <button class="pick" id="pickBtn">Bild aus Galerie wählen</button>
+      <input type="file" id="fileInput" accept="image/*" hidden>
+    </div>
+    <div id="urlBox" style="margin-top:10px" hidden>
+      <input type="url" id="urlInput" placeholder="https://…/meme.jpg" autocomplete="off">
+    </div>
+    <img id="preview" class="preview" alt="" hidden>
+    <div class="hint" id="postHint"></div>
+
+    <div class="row">
+      <button class="btn ghost" id="cancelPost">Abbrechen</button>
+      <button class="btn primary" id="savePost" disabled>Posten</button>
+    </div>
+  </div>
+</div>
+
+<!-- Detail -->
+<div class="overlay center" id="detailOv">
+  <div class="detail">
+    <img id="detailImg" alt="Meme">
+    <div class="reacts">
+      <button class="react" id="laughBtn">😂 <span id="laughCount">0</span></button>
+      <button class="react" id="latschBtn">😒 <span id="latschCount">0</span></button>
+    </div>
+    <div class="detailfoot">
+      <button class="link danger" id="deleteBtn">Löschen</button>
+      <button class="link" id="closeDetail">Schliessen</button>
+    </div>
+  </div>
+</div>
+
+<!-- Menü -->
+<div class="overlay bottom" id="menuOv">
+  <div class="sheet">
+    <h2>Gruppe <code id="groupCode"></code></h2>
+    <button class="menuitem" id="shareBtn">🔗 Einladungslink teilen</button>
+    <button class="menuitem" id="samplesBtn">🎲 Beispiel-Memes hinzufügen</button>
+    <button class="menuitem" id="leaveBtn" style="color:var(--danger)">🚪 Gruppe auf diesem Gerät verlassen</button>
+    <p class="note">Wer den Einladungslink hat, kann alle Memes der Gruppe sehen, posten und bewerten. Teile ihn nur mit Freunden.</p>
+    <div class="row"><button class="btn ghost" id="closeMenu">Schliessen</button></div>
+  </div>
+</div>
+
+<script>
+/* =====================================================================
+   KONFIGURATION – hier deine Supabase-Werte eintragen
+   (Supabase → Connect  oder  Project Settings → API Keys)
+   ===================================================================== */
+const SUPABASE_URL = '';   // z.B. 'https://abcdefgh.supabase.co'
+const SUPABASE_KEY = '';   // Publishable key: 'sb_publishable_…'  (NIE den secret key!)
+/* ===================================================================== */
+
+const BUCKET = 'memes';
+const OFFLINE = 'Server nicht erreichbar. Prüfe die Internetverbindung. Falls die App eine Woche nicht benutzt wurde, ist das Supabase-Projekt evtl. pausiert: im Supabase-Dashboard auf «Restore» klicken.';
+
+/* ---------- Supabase (direkt per fetch, ohne Bibliothek) ---------- */
+async function errMsg(r) {
+  let t = '';
+  try { const j = await r.json(); t = j.message || j.error || j.msg || ''; } catch {}
+  if (r.status >= 500 || r.status === 0) return OFFLINE;
+  return 'Fehler ' + r.status + (t ? ': ' + t : '');
+}
+const realApi = {
+  hdr(extra) {
+    const h = { apikey: SUPABASE_KEY, ...extra };
+    // Alte "anon"-Keys (JWT) brauchen zusätzlich den Authorization-Header, neue sb_publishable-Keys nicht
+    if (!SUPABASE_KEY.startsWith('sb_')) h.Authorization = 'Bearer ' + SUPABASE_KEY;
+    return h;
+  },
+  async rpc(fn, args) {
+    let r;
+    try {
+      r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+        method: 'POST', headers: this.hdr({ 'Content-Type': 'application/json' }), body: JSON.stringify(args)
+      });
+    } catch { throw new Error(OFFLINE); }
+    if (!r.ok) throw new Error(await errMsg(r));
+    const t = await r.text();
+    return t ? JSON.parse(t) : null;
+  },
+  async upload(path, blob) {
+    let r;
+    try {
+      r = await fetch(`${SUPABASE_URL}/storage/v1/object/${BUCKET}/${path}`, {
+        method: 'POST', body: blob,
+        headers: this.hdr({ 'Content-Type': blob.type || 'image/jpeg', 'x-upsert': 'false', 'cache-control': 'max-age=31536000' })
+      });
+    } catch { throw new Error(OFFLINE); }
+    if (!r.ok) throw new Error(await errMsg(r));
+  },
+  url(path) { return `${SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${path}`; }
+};
+const api = window.__memecloudMockApi || realApi;
+const configured = !!window.__memecloudMockApi ||
+  (/^https:\/\/[^/]+$/.test(SUPABASE_URL.replace(/\/$/, '')) && SUPABASE_KEY.length > 20);
+
+/* ---------- Helfer ---------- */
+const $ = id => document.getElementById(id);
+const el = (tag, cls) => { const e = document.createElement(tag); if (cls) e.className = cls; return e; };
+const PALETTE = ['#ffcc33', '#ff5d8f', '#5ce1e6', '#9b8cff', '#7ee08a', '#ff9f43', '#f3f0ff'];
+const hash = s => [...s].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7);
+const normTag = s => s.trim().replace(/\s+/g, ' ');
+const centerOrder = arr => { const out = []; arr.forEach((x, i) => i % 2 ? out.unshift(x) : out.push(x)); return out; };
+const srcOf = m => /^(https:|data:)/.test(m.bild) ? m.bild : api.url(m.bild);
+const time = m => Date.parse(m.erstellt) || 0;
+const newId = () => crypto.randomUUID ? crypto.randomUUID()
+  : [...crypto.getRandomValues(new Uint8Array(16))].map(b => b.toString(16).padStart(2, '0')).join('');
+function lsGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
+function lsSet(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} }
+
+let toastTimer;
+function toast(msg, ms = 4000) {
+  $('toast').textContent = msg; $('toast').hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').hidden = true, ms);
+}
+
+/* ---------- Gruppe (geheimer Link statt Login) ---------- */
+const GROUP_RE = /^[a-z0-9]{8,32}$/;
+let gruppe = null;
+
+function setUrlGroup(g) {
+  const u = new URL(location.href);
+  if (g) u.searchParams.set('g', g); else u.searchParams.delete('g');
+  history.replaceState(history.state, '', u);
+}
+function readGroup() {
+  const q = new URLSearchParams(location.search).get('g');
+  if (q && GROUP_RE.test(q)) { lsSet('memecloud-gruppe', q); return q; }
+  const s = lsGet('memecloud-gruppe');
+  if (s && GROUP_RE.test(s)) { setUrlGroup(s); return s; }  // Link im Browser behalten (wichtig für "Zum Home-Bildschirm")
+  return null;
+}
+function newCode() {
+  const a = 'abcdefghijkmnpqrstuvwxyz23456789';
+  return [...crypto.getRandomValues(new Uint8Array(12))].map(x => a[x % a.length]).join('');
+}
+function inviteLink() {
+  const u = new URL(location.href); u.hash = ''; u.search = '?g=' + gruppe; return u.toString();
+}
+
+/* Eigene Stimmen merken: eine Reaktion pro Meme und Gerät */
+let votes = {};
+try { votes = JSON.parse(lsGet('memecloud-votes') || '{}') || {}; } catch { votes = {}; }
+const saveVotes = () => lsSet('memecloud-votes', JSON.stringify(votes));
+
+/* ---------- Daten ---------- */
+let memes = [], loaded = false, loading = false, loadError = null, lastLoad = 0;
+
+async function loadAll() {
+  if (!gruppe || loading) return;
+  loading = true; $('refreshBtn').classList.add('spin');
+  try {
+    memes = (await api.rpc('memes_laden', { p_gruppe: gruppe })) || [];
+    loaded = true; loadError = null; lastLoad = Date.now();
+  } catch (e) {
+    loadError = e.message;
+    if (loaded) toast(e.message, 7000);
+  } finally {
+    loading = false; $('refreshBtn').classList.remove('spin');
+  }
+  if (!$('detailOv').classList.contains('open')) route();
+}
+
+/* ---------- Routing ---------- */
+let currentTag = null, cameFromHome = false;
+window.addEventListener('hashchange', route);
+
+function setChrome({ back = false, menu = false, refresh = false, add = false, title = 'MemeCloud' }) {
+  $('backBtn').hidden = !back; $('menuBtn').hidden = !menu;
+  $('refreshBtn').hidden = !refresh; $('addBtn').hidden = !add;
+  $('title').textContent = title;
+}
+
+function route() {
+  if (!configured) return renderSetup();
+  if (!gruppe) return renderWelcome();
+  if (!loaded) return loadError ? renderError() : renderLoading();
+  const h = location.hash;
+  if (h.startsWith('#/tag/')) { currentTag = decodeURIComponent(h.slice(6)); renderTag(currentTag); }
+  else { currentTag = null; cameFromHome = false; renderHome(); }
+  window.scrollTo(0, 0);
+}
+function goTag(name) { cameFromHome = true; location.hash = '#/tag/' + encodeURIComponent(name); }
+$('backBtn').onclick = () => cameFromHome ? history.back() : location.replace('#/');
+$('refreshBtn').onclick = loadAll;
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && gruppe && Date.now() - lastLoad > 15000) loadAll();
+});
+
+/* ---------- Spezial-Ansichten ---------- */
+function renderSetup() {
+  setChrome({});
+  $('main').innerHTML = `<div class="welcome"><div class="big">🛠️</div><h2>Noch nicht eingerichtet</h2>
+    <p>Trage oben in der Datei <code>index.html</code> deine Werte für <code>SUPABASE_URL</code>
+    und <code>SUPABASE_KEY</code> ein.</p></div>`;
+}
+function renderLoading() {
+  setChrome({ refresh: true });
+  $('main').innerHTML = '<p class="empty">Lädt Memes…</p>';
+}
+function renderError() {
+  setChrome({ refresh: true, menu: true });
+  $('main').innerHTML = '';
+  const p = el('p', 'empty'); p.textContent = loadError;
+  const b = el('button', 'btn primary'); b.textContent = 'Nochmals versuchen'; b.onclick = loadAll;
+  p.append(el('br'), b); $('main').append(p);
+}
+function renderWelcome() {
+  setChrome({});
+  $('main').innerHTML = `<div class="welcome">
+    <div class="big">😂</div>
+    <h2>Willkommen bei MemeCloud</h2>
+    <p>Zeig mit Memes, wie es dir geht, sortiert nach Tags. Mit deinen Freunden in einer privaten Gruppe.</p>
+    <label class="check"><input type="checkbox" id="withSamples" checked> mit Beispiel-Memes starten</label>
+    <button class="btn primary" id="createGroup">Neue Gruppe starten</button>
+    <p class="note">Hast du einen Einladungslink bekommen? Dann öffne einfach diesen Link.</p>
+  </div>`;
+  $('createGroup').onclick = async e => {
+    e.currentTarget.disabled = true; e.currentTarget.textContent = 'Wird erstellt…';
+    const withSamples = $('withSamples').checked;
+    gruppe = newCode(); lsSet('memecloud-gruppe', gruppe); setUrlGroup(gruppe);
+    memes = []; loaded = true; lastLoad = Date.now();
+    if (withSamples) await loadSamples();
+    location.hash = '#/'; route();
+    toast('Gruppe erstellt! Teile den Einladungslink über das Menü ⋯', 6000);
+  };
+}
+
+/* ---------- Hauptseite: Word Cloud ---------- */
+function renderHome() {
+  setChrome({ menu: true, refresh: true, add: true });
+  const tags = {};
+  for (const m of memes) {
+    const t = tags[m.tag] || (tags[m.tag] = { name: m.tag, count: 0, react: 0 });
+    t.count++; t.react += m.lachen + m.laetsch;
+  }
+  const list = Object.values(tags);
+  if (!list.length) {
+    $('main').innerHTML = '<p class="empty">Noch keine Memes in dieser Gruppe.<br>Tippe auf <b>+</b> und poste das erste.</p>';
+    return;
+  }
+  list.forEach(t => t.w = Math.sqrt(t.count + t.react * 0.25));
+  const ws = list.map(t => t.w), min = Math.min(...ws), max = Math.max(...ws);
+  list.sort((a, b) => b.w - a.w);
+
+  const cloud = el('div', 'cloud');
+  for (const t of centerOrder(list)) {
+    const n = max === min ? 0.5 : (t.w - min) / (max - min);
+    const b = el('button', 'tag');
+    b.style.fontSize = (16 + n * 40) + 'px';
+    b.style.fontWeight = n > 0.6 ? 900 : n > 0.3 ? 800 : 600;
+    b.style.color = PALETTE[hash(t.name) % PALETTE.length];
+    b.textContent = t.name;
+    const s = el('small'); s.textContent = t.count; b.append(s);
+    b.onclick = () => goTag(t.name);
+    cloud.append(b);
+  }
+  $('main').replaceChildren(cloud);
+}
+
+/* ---------- Tag-Ansicht: Bilder-Cloud ---------- */
+function renderTag(tag) {
+  setChrome({ back: true, refresh: true, add: true, title: '#' + tag });
+  const list = memes.filter(m => m.tag === tag).map(m => ({ m, score: m.lachen - m.laetsch }));
+  if (!list.length) {
+    $('main').innerHTML = '<p class="empty">In diesem Tag gibt es keine Memes.<br>Tippe auf <b>+</b> um eins zu posten.</p>';
+    return;
+  }
+  list.sort((a, b) => b.score - a.score || b.m.lachen - a.m.lachen || time(b.m) - time(a.m));
+
+  const scores = list.map(x => x.score), sMin = Math.min(...scores), sMax = Math.max(...scores);
+  const width = Math.min(window.innerWidth, 900) - 32;
+  const maxS = Math.min(width * 0.7, 360), minS = Math.max(70, width * 0.2);
+  const last = Math.max(list.length - 1, 1);
+  list.forEach((x, i) => {
+    const rankN = 1 - i / last;
+    const scoreN = sMax === sMin ? rankN : (x.score - sMin) / (sMax - sMin);
+    x.size = i === 0 ? maxS : minS + (maxS - minS) * Math.pow(0.6 * scoreN + 0.4 * rankN, 1.2);
+  });
+
+  const cloud = el('div', 'imgcloud');
+  for (const x of centerOrder(list)) {
+    const { m } = x;
+    const b = el('button', 'tile' + (x === list[0] && list.length > 1 ? ' top' : ''));
+    b.style.width = b.style.height = Math.round(x.size) + 'px';
+    const img = el('img'); img.src = srcOf(m); img.alt = 'Meme'; img.loading = 'lazy';
+    const badge = el('span', 'badge');
+    badge.textContent = x.size > 120 ? `😂 ${m.lachen} · 😒 ${m.laetsch}` : (x.score > 0 ? '+' : '') + x.score;
+    b.append(img, badge);
+    b.onclick = () => openDetail(m);
+    cloud.append(b);
+  }
+  $('main').replaceChildren(cloud);
+}
+
+/* ---------- Detail + Bewertung ---------- */
+let detailMeme = null;
+function openDetail(m) {
+  detailMeme = m;
+  $('detailImg').src = srcOf(m);
+  updateReacts();
+  $('detailOv').classList.add('open');
+}
+function updateReacts() {
+  const m = detailMeme, v = votes[m.id];
+  $('laughCount').textContent = m.lachen;
+  $('latschCount').textContent = m.laetsch;
+  $('laughBtn').classList.toggle('chosen', v === 'lachen');
+  $('latschBtn').classList.toggle('chosen', v === 'laetsch');
+  $('laughBtn').disabled = $('latschBtn').disabled = !!v;
+}
+async function react(art, btn) {
+  const m = detailMeme;
+  if (!m || votes[m.id]) return;
+  votes[m.id] = art; saveVotes(); m[art]++; updateReacts();
+  btn.classList.remove('bump'); void btn.offsetWidth; btn.classList.add('bump');
+  try {
+    const r = await api.rpc('meme_reagieren', { p_gruppe: gruppe, p_id: m.id, p_art: art });
+    if (r && r.id) { m.lachen = r.lachen; m.laetsch = r.laetsch; }
+  } catch (e) {
+    m[art]--; delete votes[m.id]; saveVotes(); toast(e.message, 7000);
+  }
+  if (detailMeme === m) updateReacts();
+}
+$('laughBtn').onclick = e => react('lachen', e.currentTarget);
+$('latschBtn').onclick = e => react('laetsch', e.currentTarget);
+function closeDetail() { $('detailOv').classList.remove('open'); detailMeme = null; route(); }
+$('closeDetail').onclick = closeDetail;
+$('detailOv').onclick = e => { if (e.target.id === 'detailOv') closeDetail(); };
+$('deleteBtn').onclick = async () => {
+  if (!confirm('Dieses Meme für die ganze Gruppe löschen?')) return;
+  const m = detailMeme;
+  try {
+    await api.rpc('meme_loeschen', { p_gruppe: gruppe, p_id: m.id });
+    memes = memes.filter(x => x.id !== m.id);
+    closeDetail();
+  } catch (e) { toast(e.message, 7000); }
+};
+
+/* ---------- Posten ---------- */
+let mode = 'file', pendingBlob = null, pendingLink = null, previewUrl = null;
+const hasPending = () => mode === 'file' ? !!pendingBlob : !!pendingLink;
+
+function openPost() {
+  const tags = [...new Set(memes.map(m => m.tag))].sort((a, b) => a.localeCompare(b));
+  $('tagList').replaceChildren(...tags.map(t => { const o = el('option'); o.value = t; return o; }));
+  $('tagInput').value = currentTag || '';
+  setMode('file');
+  $('postOv').classList.add('open');
+}
+function closePost() { $('postOv').classList.remove('open'); clearPending(); }
+function clearPending() {
+  pendingBlob = null; pendingLink = null;
+  if (previewUrl) { URL.revokeObjectURL(previewUrl); previewUrl = null; }
+  $('preview').hidden = true; $('preview').removeAttribute('src');
+  $('postHint').textContent = ''; $('urlInput').value = ''; $('fileInput').value = '';
+}
+function setMode(m) {
+  mode = m; clearPending();
+  $('segFile').classList.toggle('on', m === 'file');
+  $('segUrl').classList.toggle('on', m === 'url');
+  $('fileBox').hidden = m !== 'file';
+  $('urlBox').hidden = m !== 'url';
+  validate();
+}
+function validate() { $('savePost').disabled = !(normTag($('tagInput').value) && hasPending()); }
+
+$('addBtn').onclick = openPost;
+$('cancelPost').onclick = closePost;
+$('postOv').onclick = e => { if (e.target.id === 'postOv') closePost(); };
+$('segFile').onclick = () => setMode('file');
+$('segUrl').onclick = () => setMode('url');
+$('pickBtn').onclick = () => $('fileInput').click();
+$('tagInput').oninput = validate;
+
+$('fileInput').onchange = async () => {
+  const f = $('fileInput').files[0];
+  if (!f) return;
+  $('postHint').textContent = '';
+  try {
+    pendingBlob = await prepareImage(f);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    previewUrl = URL.createObjectURL(pendingBlob);
+    $('preview').src = previewUrl; $('preview').hidden = false;
+  } catch (err) { pendingBlob = null; $('postHint').textContent = err.message; }
+  validate();
+};
+$('urlInput').oninput = () => {
+  const v = $('urlInput').value.trim();
+  pendingLink = /^https:\/\/\S+$/i.test(v) ? v : null;
+  $('postHint').textContent = /^http:\/\//i.test(v) ? 'Der Link muss mit https:// beginnen.' : '';
+  $('preview').hidden = !pendingLink;
+  if (pendingLink) $('preview').src = pendingLink;
+  validate();
+};
+$('preview').onerror = () => {
+  if (mode !== 'url' || !pendingLink) return;
+  $('postHint').textContent = 'Bild konnte nicht geladen werden. Ist es ein direkter Bild-Link?';
+  pendingLink = null; $('preview').hidden = true; validate();
+};
+
+$('savePost').onclick = async () => {
+  const tag = normTag($('tagInput').value);
+  if (!tag || !hasPending()) return;
+  const btn = $('savePost');
+  btn.disabled = true; btn.textContent = mode === 'file' ? 'Lädt hoch…' : 'Speichert…';
+  $('postHint').textContent = '';
+  try {
+    let bild;
+    if (mode === 'file') {
+      bild = `${gruppe}/${newId()}.${pendingBlob.type === 'image/gif' ? 'gif' : 'jpg'}`;
+      await api.upload(bild, pendingBlob);
+    } else bild = pendingLink;
+    const m = await api.rpc('meme_posten', { p_gruppe: gruppe, p_tag: tag, p_bild: bild });
+    memes.unshift(m);
+    closePost();
+    if (currentTag === m.tag) route(); else goTag(m.tag);
+  } catch (e) {
+    $('postHint').textContent = e.message;
+  } finally {
+    btn.textContent = 'Posten'; validate();
+  }
+};
+
+// Fotos verkleinern (max. 1080 px, JPEG), GIFs bleiben animiert
+function prepareImage(file) {
+  if (file.type === 'image/gif') {
+    if (file.size > 4.5 * 1024 * 1024) return Promise.reject(new Error('GIF ist zu gross (max. 4.5 MB).'));
+    return Promise.resolve(file);
+  }
+  return new Promise((res, rej) => {
+    const url = URL.createObjectURL(file), img = new Image();
+    img.onload = () => {
+      const s = Math.min(1, 1080 / Math.max(img.width, img.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.width * s); c.height = Math.round(img.height * s);
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);  // transparente PNGs: weisser Hintergrund
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      c.toBlob(b => b ? res(b) : rej(new Error('Bild konnte nicht umgewandelt werden.')), 'image/jpeg', 0.82);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('Bild konnte nicht gelesen werden.')); };
+    img.src = url;
+  });
+}
+
+/* ---------- Beispiel-Inhalte ---------- */
+const xml = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function svgMeme(bg, emoji, top, bottom) {
+  const line = (t, y) => {
+    const size = Math.min(56, Math.round(560 / (t.length * 0.6)));
+    return `<text x="300" y="${y}" font-size="${size}" text-anchor="middle" dominant-baseline="middle" font-family="Impact,'Arial Black',sans-serif" font-weight="900" fill="#fff" stroke="#000" stroke-width="${Math.max(3, size / 9)}" paint-order="stroke">${xml(t)}</text>`;
+  };
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600"><defs><radialGradient id="g" cx="50%" cy="45%" r="70%"><stop offset="0" stop-color="#fff" stop-opacity=".25"/><stop offset="1" stop-color="#000" stop-opacity=".25"/></radialGradient></defs><rect width="600" height="600" fill="${bg}"/><rect width="600" height="600" fill="url(#g)"/><text x="300" y="320" font-size="230" text-anchor="middle" dominant-baseline="middle">${emoji}</text>${line(top, 70)}${line(bottom, 535)}</svg>`;
+  return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+}
+const SAMPLES = [
+  ['Montag', '#c0392b', '😴', 'WECKER KLINGELT', 'ICH: NOCH 5 MINUTEN'],
+  ['Montag', '#5d6d7e', '🧟', 'MONTAG 7:00', 'ICH IM ZUG'],
+  ['Montag', '#2471a3', '📅', 'ES IST ERST', 'MONTAG?!'],
+  ['Montag', '#7d3c98', '🫥', 'WOCHENENDE VORBEI', 'SEELE NOCH IM BETT'],
+  ['Kaffee', '#6e4b3a', '☕', 'ERST KAFFEE', 'DANN MENSCH'],
+  ['Kaffee', '#1e8449', '🔋', 'AKKU: 2%', 'KAFFEE LÄDT…'],
+  ['Kaffee', '#a04000', '🫠', 'DER 4. KAFFEE', 'UND IMMER NOCH MÜDE'],
+  ['Homeoffice', '#1f618d', '👔', 'OBEN: MEETING', 'UNTEN: PYJAMA'],
+  ['Homeoffice', '#b9770e', '🐈', 'WICHTIGER CALL', 'KATZE: MEINE BÜHNE'],
+  ['Homeoffice', '#424949', '🔇', 'DU BIST GEMUTET', 'SEIT 10 MINUTEN'],
+  ['Wetter', '#34495e', '🌧️', 'SOMMER IN DER SCHWEIZ', '14 GRAD UND REGEN'],
+  ['Wetter', '#d4ac0d', '☀️', 'ENDLICH SONNE', 'ICH: IM BÜRO'],
+  ['Wetter', '#839192', '🌫️', 'NEBEL', 'SEIT OKTOBER'],
+  ['Ferien', '#17a589', '🏖️', 'LETZTER FERIENTAG', 'POSTFACH: 438 MAILS'],
+  ['Ferien', '#ca6f1e', '🧳', 'PACKEN FÜR 3 TAGE', 'KOFFER FÜR 3 WOCHEN'],
+  ['Sport', '#922b21', '🏋️', 'JANUAR: JEDEN TAG GYM', 'FEBRUAR: WELCHES GYM?'],
+  ['Sport', '#5b2c6f', '🛋️', 'HEUTE SPORT?', 'MORGEN. BESTIMMT.'],
+];
+async function loadSamples() {
+  let n = 0;
+  for (const [tag, bg, emoji, top, bottom] of SAMPLES) {
+    try {
+      const m = await api.rpc('meme_posten', { p_gruppe: gruppe, p_tag: tag, p_bild: svgMeme(bg, emoji, top, bottom) });
+      if (m && m.id) { memes.unshift(m); n++; }
+      toast(`Beispiele werden geladen… ${n}/${SAMPLES.length}`, 10000);
+    } catch (e) { toast(e.message, 7000); break; }
+  }
+  if (n) toast(n + ' Beispiel-Memes hinzugefügt.');
+}
+
+/* ---------- Menü ---------- */
+$('menuBtn').onclick = () => { $('groupCode').textContent = gruppe; $('menuOv').classList.add('open'); };
+const closeMenu = () => $('menuOv').classList.remove('open');
+$('closeMenu').onclick = closeMenu;
+$('menuOv').onclick = e => { if (e.target.id === 'menuOv') closeMenu(); };
+
+$('shareBtn').onclick = async () => {
+  const url = inviteLink();
+  if (navigator.share) {
+    try { await navigator.share({ title: 'MemeCloud', text: 'Komm in meine MemeCloud-Gruppe 😂', url }); return; }
+    catch (e) { if (e.name === 'AbortError') return; }
+  }
+  try { await navigator.clipboard.writeText(url); toast('Einladungslink kopiert.'); }
+  catch { prompt('Diesen Link teilen:', url); }
+};
+$('samplesBtn').onclick = async () => {
+  closeMenu(); await loadSamples(); location.hash = '#/'; route();
+};
+$('leaveBtn').onclick = () => {
+  if (!confirm('Gruppe auf diesem Gerät verlassen?\n\nDie Memes bleiben erhalten. Mit dem Einladungslink kommst du jederzeit zurück:\n' + inviteLink())) return;
+  lsSet('memecloud-gruppe', null); setUrlGroup(null);
+  gruppe = null; memes = []; loaded = false; loadError = null;
+  closeMenu(); location.hash = ''; route();
+};
+
+/* ---------- Start ---------- */
+gruppe = configured ? readGroup() : null;
+route();
+if (gruppe) loadAll();
+</script>
+</body>
+</html>
