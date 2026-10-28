@@ -177,11 +177,10 @@
 <!-- Menü -->
 <div class="overlay bottom" id="menuOv">
   <div class="sheet">
-    <h2>Gruppe <code id="groupCode"></code></h2>
-    <button class="menuitem" id="shareBtn">🔗 Einladungslink teilen</button>
+    <h2>Menü</h2>
+    <button class="menuitem" id="shareBtn">🔗 Link zur App teilen</button>
     <button class="menuitem" id="samplesBtn">🎲 Beispiel-Memes hinzufügen</button>
-    <button class="menuitem" id="leaveBtn" style="color:var(--danger)">🚪 Gruppe auf diesem Gerät verlassen</button>
-    <p class="note">Wer den Einladungslink hat, kann alle Memes der Gruppe sehen, posten und bewerten. Teile ihn nur mit Freunden.</p>
+    <p class="note">Alle, die diese Seite öffnen, sehen dieselben Memes und können posten, bewerten und löschen.</p>
     <div class="row"><button class="btn ghost" id="closeMenu">Schliessen</button></div>
   </div>
 </div>
@@ -191,8 +190,8 @@
    KONFIGURATION – hier deine Supabase-Werte eintragen
    (Supabase → Connect  oder  Project Settings → API Keys)
    ===================================================================== */
-const SUPABASE_URL = 'https://jqcztuwrwmxyqtmiilzx.supabase.co';   // z.B. 'https://abcdefgh.supabase.co'
-const SUPABASE_KEY = 'sb_publishable_rUqQDCF_s6bzWisG0R7fpA_AZ190BMx';   // Publishable key: 'sb_publishable_…'  (NIE den secret key!)
+const SUPABASE_URL = 'https://jqcztuwrwmxyqtmiilzx.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_rUqQDCF_s6bzWisG0R7fpA_AZ190BMx';   // Publishable key (NIE den secret key!)
 /* ===================================================================== */
 
 const BUCKET = 'memes';
@@ -259,29 +258,10 @@ function toast(msg, ms = 4000) {
   clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').hidden = true, ms);
 }
 
-/* ---------- Gruppe (geheimer Link statt Login) ---------- */
-const GROUP_RE = /^[a-z0-9]{8,32}$/;
-let gruppe = null;
-
-function setUrlGroup(g) {
-  const u = new URL(location.href);
-  if (g) u.searchParams.set('g', g); else u.searchParams.delete('g');
-  history.replaceState(history.state, '', u);
-}
-function readGroup() {
-  const q = new URLSearchParams(location.search).get('g');
-  if (q && GROUP_RE.test(q)) { lsSet('memecloud-gruppe', q); return q; }
-  const s = lsGet('memecloud-gruppe');
-  if (s && GROUP_RE.test(s)) { setUrlGroup(s); return s; }  // Link im Browser behalten (wichtig für "Zum Home-Bildschirm")
-  return null;
-}
-function newCode() {
-  const a = 'abcdefghijkmnpqrstuvwxyz23456789';
-  return [...crypto.getRandomValues(new Uint8Array(12))].map(x => a[x % a.length]).join('');
-}
-function inviteLink() {
-  const u = new URL(location.href); u.hash = ''; u.search = '?g=' + gruppe; return u.toString();
-}
+/* ---------- Ein gemeinsamer Raum für alle ---------- */
+// Die Datenbank kennt "Gruppen"; die App nutzt bewusst nur eine einzige, die alle teilen.
+const gruppe = 'allememes';
+function appLink() { const u = new URL(location.href); u.hash = ''; u.search = ''; return u.toString(); }
 
 /* Eigene Stimmen merken: eine Reaktion pro Meme und Gerät */
 let votes = {};
@@ -318,7 +298,6 @@ function setChrome({ back = false, menu = false, refresh = false, add = false, t
 
 function route() {
   if (!configured) return renderSetup();
-  if (!gruppe) return renderWelcome();
   if (!loaded) return loadError ? renderError() : renderLoading();
   const h = location.hash;
   if (h.startsWith('#/tag/')) { currentTag = decodeURIComponent(h.slice(6)); renderTag(currentTag); }
@@ -350,26 +329,6 @@ function renderError() {
   const b = el('button', 'btn primary'); b.textContent = 'Nochmals versuchen'; b.onclick = loadAll;
   p.append(el('br'), b); $('main').append(p);
 }
-function renderWelcome() {
-  setChrome({});
-  $('main').innerHTML = `<div class="welcome">
-    <div class="big">😂</div>
-    <h2>Willkommen bei MemeCloud</h2>
-    <p>Zeig mit Memes, wie es dir geht, sortiert nach Tags. Mit deinen Freunden in einer privaten Gruppe.</p>
-    <label class="check"><input type="checkbox" id="withSamples" checked> mit Beispiel-Memes starten</label>
-    <button class="btn primary" id="createGroup">Neue Gruppe starten</button>
-    <p class="note">Hast du einen Einladungslink bekommen? Dann öffne einfach diesen Link.</p>
-  </div>`;
-  $('createGroup').onclick = async e => {
-    e.currentTarget.disabled = true; e.currentTarget.textContent = 'Wird erstellt…';
-    const withSamples = $('withSamples').checked;
-    gruppe = newCode(); lsSet('memecloud-gruppe', gruppe); setUrlGroup(gruppe);
-    memes = []; loaded = true; lastLoad = Date.now();
-    if (withSamples) await loadSamples();
-    location.hash = '#/'; route();
-    toast('Gruppe erstellt! Teile den Einladungslink über das Menü ⋯', 6000);
-  };
-}
 
 /* ---------- Hauptseite: Word Cloud ---------- */
 function renderHome() {
@@ -381,7 +340,9 @@ function renderHome() {
   }
   const list = Object.values(tags);
   if (!list.length) {
-    $('main').innerHTML = '<p class="empty">Noch keine Memes in dieser Gruppe.<br>Tippe auf <b>+</b> und poste das erste.</p>';
+    $('main').innerHTML = '<p class="empty">Noch keine Memes.<br>Tippe auf <b>+</b> und poste das erste.<br>' +
+      '<button class="btn ghost" id="emptySamples">🎲 Beispiel-Memes laden</button></p>';
+    $('emptySamples').onclick = async e => { e.currentTarget.disabled = true; await loadSamples(); route(); };
     return;
   }
   list.forEach(t => t.w = Math.sqrt(t.count + t.react * 0.25));
@@ -632,34 +593,29 @@ async function loadSamples() {
 }
 
 /* ---------- Menü ---------- */
-$('menuBtn').onclick = () => { $('groupCode').textContent = gruppe; $('menuOv').classList.add('open'); };
+$('menuBtn').onclick = () => $('menuOv').classList.add('open');
 const closeMenu = () => $('menuOv').classList.remove('open');
 $('closeMenu').onclick = closeMenu;
 $('menuOv').onclick = e => { if (e.target.id === 'menuOv') closeMenu(); };
 
 $('shareBtn').onclick = async () => {
-  const url = inviteLink();
+  const url = appLink();
   if (navigator.share) {
-    try { await navigator.share({ title: 'MemeCloud', text: 'Komm in meine MemeCloud-Gruppe 😂', url }); return; }
+    try { await navigator.share({ title: 'MemeCloud', text: 'Schau dir MemeCloud an 😂', url }); return; }
     catch (e) { if (e.name === 'AbortError') return; }
   }
-  try { await navigator.clipboard.writeText(url); toast('Einladungslink kopiert.'); }
+  try { await navigator.clipboard.writeText(url); toast('Link kopiert.'); }
   catch { prompt('Diesen Link teilen:', url); }
 };
 $('samplesBtn').onclick = async () => {
   closeMenu(); await loadSamples(); location.hash = '#/'; route();
 };
-$('leaveBtn').onclick = () => {
-  if (!confirm('Gruppe auf diesem Gerät verlassen?\n\nDie Memes bleiben erhalten. Mit dem Einladungslink kommst du jederzeit zurück:\n' + inviteLink())) return;
-  lsSet('memecloud-gruppe', null); setUrlGroup(null);
-  gruppe = null; memes = []; loaded = false; loadError = null;
-  closeMenu(); location.hash = ''; route();
-};
-
 /* ---------- Start ---------- */
-gruppe = configured ? readGroup() : null;
+// Gruppen-Links aus der vorherigen Version aufräumen
+if (new URLSearchParams(location.search).has('g')) history.replaceState(null, '', appLink() + location.hash);
+lsSet('memecloud-gruppe', null);
 route();
-if (gruppe) loadAll();
+if (configured) loadAll();
 </script>
 </body>
 </html>
