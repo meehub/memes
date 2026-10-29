@@ -47,6 +47,7 @@
   .tile:active{transform:scale(.96)}
   .tile img{width:100%;height:100%;object-fit:cover;display:block}
   .tile.top{box-shadow:0 0 0 3px var(--accent)}
+  .tile.broken::before{content:'🖼️';position:absolute;inset:0;display:grid;place-items:center;font-size:28px;opacity:.35}
   .badge{position:absolute;right:6px;bottom:6px;background:rgba(0,0,0,.7);color:#fff;font-size:12px;
     padding:2px 7px;border-radius:999px;font-weight:700}
 
@@ -69,6 +70,23 @@
   .toast{position:fixed;left:16px;right:96px;bottom:calc(28px + env(safe-area-inset-bottom));z-index:20;
     background:#000;color:#fff;border:1px solid var(--line);padding:12px 14px;border-radius:12px;font-size:14px;
     line-height:1.4;box-shadow:0 6px 20px rgba(0,0,0,.5)}
+
+  /* Neu-Markierungen */
+  .newbar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px 10px;
+    background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 12px;font-size:14px;margin-bottom:12px}
+  .newbar b{color:var(--accent)}
+  .linkbtn{background:none;border:0;color:var(--muted);font-size:13px;padding:4px 0;text-decoration:underline}
+  .strip{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 10px;margin-bottom:12px;border-bottom:1px solid var(--line);
+    scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch}
+  .strip .tile{width:120px;height:120px;scroll-snap-align:start}
+  .newtag{position:absolute;left:6px;top:6px;background:var(--accent);color:#1a1500;font-size:11px;font-weight:800;
+    padding:2px 7px;border-radius:999px;letter-spacing:.03em;box-shadow:0 2px 6px rgba(0,0,0,.4)}
+  .tag.hasnew{text-shadow:0 0 18px rgba(255,204,51,.45)}
+  .newpill{display:inline-block;vertical-align:super;margin-left:4px;font-size:12px;font-weight:800;line-height:1.2;
+    background:var(--accent);color:#1a1500;padding:2px 7px;border-radius:999px;text-shadow:none;
+    animation:pulse 1.8s ease-in-out infinite}
+  @keyframes pulse{50%{transform:scale(1.12)}}
+  @media (prefers-reduced-motion:reduce){.newpill{animation:none}}
 
   /* Overlays */
   .overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;z-index:10}
@@ -107,7 +125,8 @@
     border-radius:14px;background:var(--card2);color:var(--text);font-size:28px}
   .react span{font-size:18px;font-weight:700}
   .react.chosen{border-color:var(--accent)}
-  .react:disabled:not(.chosen){opacity:.45}
+  .react.other{opacity:.55}
+  .reacthint{text-align:center;color:var(--muted);font-size:12px;margin:-4px 0 0;min-height:1em}
   .react.bump{animation:bump .25s}
   @keyframes bump{50%{transform:scale(1.12)}}
   .detailfoot{display:flex;justify-content:space-between;align-items:center}
@@ -167,6 +186,7 @@
       <button class="react" id="laughBtn">😂 <span id="laughCount">0</span></button>
       <button class="react" id="latschBtn">😒 <span id="latschCount">0</span></button>
     </div>
+    <p class="reacthint" id="reactHint"></p>
     <div class="detailfoot">
       <button class="link danger" id="deleteBtn">Löschen</button>
       <button class="link" id="closeDetail">Schliessen</button>
@@ -277,6 +297,7 @@ async function loadAll() {
   try {
     memes = (await api.rpc('memes_laden', { p_gruppe: gruppe })) || [];
     loaded = true; loadError = null; lastLoad = Date.now();
+    syncSeen();
   } catch (e) {
     loadError = e.message;
     if (loaded) toast(e.message, 7000);
@@ -330,13 +351,56 @@ function renderError() {
   p.append(el('br'), b); $('main').append(p);
 }
 
+/* ---------- Gesehen / Neu (nur in diesem Browser gespeichert) ---------- */
+let seen = new Set();
+try { seen = new Set(JSON.parse(lsGet('memecloud-seen') || '[]')); } catch { seen = new Set(); }
+const isNew = m => !seen.has(m.id);
+const saveSeen = () => lsSet('memecloud-seen', JSON.stringify([...seen]));
+function markSeen(ids) {
+  let changed = false;
+  for (const id of ids) if (!seen.has(id)) { seen.add(id); changed = true; }
+  if (changed) saveSeen();
+}
+function syncSeen() {
+  // Erster Start dieser Version: alles, was schon da ist, gilt als gesehen
+  if (lsGet('memecloud-seen-init') !== '1') {
+    markSeen(memes.map(m => m.id)); lsSet('memecloud-seen-init', '1'); return;
+  }
+  // Gelöschte Memes aus der Liste entfernen
+  const ids = new Set(memes.map(m => m.id));
+  let changed = false;
+  for (const id of seen) if (!ids.has(id)) { seen.delete(id); changed = true; }
+  if (changed) saveSeen();
+}
+function newBar(html, items) {
+  const bar = el('div', 'newbar');
+  const s = el('span'); s.innerHTML = html;
+  const b = el('button', 'linkbtn'); b.textContent = 'Alle als gesehen markieren';
+  b.onclick = () => { markSeen(items.map(m => m.id)); route(); };
+  bar.append(s, b);
+  return bar;
+}
+function tile(m, { size, badge, top } = {}) {
+  const b = el('button', 'tile' + (top ? ' top' : ''));
+  if (size) b.style.width = b.style.height = Math.round(size) + 'px';
+  const img = el('img'); img.src = srcOf(m); img.alt = ''; img.loading = 'lazy';
+  img.onerror = () => { img.remove(); b.classList.add('broken'); };  // z.B. Link-Meme im Netz gelöscht
+  b.append(img);
+  if (badge) { const s = el('span', 'badge'); s.textContent = badge; b.append(s); }
+  if (isNew(m)) { const n = el('span', 'newtag'); n.textContent = 'NEU'; b.append(n); }
+  b.onclick = () => openDetail(m);
+  return b;
+}
+
 /* ---------- Hauptseite: Word Cloud ---------- */
 function renderHome() {
   setChrome({ menu: true, refresh: true, add: true });
   const tags = {};
+  const fresh = [];
   for (const m of memes) {
-    const t = tags[m.tag] || (tags[m.tag] = { name: m.tag, count: 0, react: 0 });
+    const t = tags[m.tag] || (tags[m.tag] = { name: m.tag, count: 0, react: 0, fresh: 0 });
     t.count++; t.react += m.lachen + m.laetsch;
+    if (isNew(m)) { t.fresh++; fresh.push(m); }
   }
   const list = Object.values(tags);
   if (!list.length) {
@@ -349,22 +413,29 @@ function renderHome() {
   const ws = list.map(t => t.w), min = Math.min(...ws), max = Math.max(...ws);
   list.sort((a, b) => b.w - a.w);
 
+  const nodes = [];
+  if (fresh.length) {
+    const nTags = list.filter(t => t.fresh).length;
+    nodes.push(newBar(`🔔 <b>${fresh.length} ${fresh.length === 1 ? 'neues Meme' : 'neue Memes'}</b> in ${nTags} ${nTags === 1 ? 'Tag' : 'Tags'}`, fresh));
+  }
   const cloud = el('div', 'cloud');
   for (const t of centerOrder(list)) {
     const n = max === min ? 0.5 : (t.w - min) / (max - min);
-    const b = el('button', 'tag');
+    const b = el('button', 'tag' + (t.fresh ? ' hasnew' : ''));
     b.style.fontSize = (16 + n * 40) + 'px';
     b.style.fontWeight = n > 0.6 ? 900 : n > 0.3 ? 800 : 600;
     b.style.color = PALETTE[hash(t.name) % PALETTE.length];
     b.textContent = t.name;
-    const s = el('small'); s.textContent = t.count; b.append(s);
+    if (t.fresh) { const p = el('span', 'newpill'); p.textContent = t.fresh + ' neu'; b.append(p); }
+    else { const s = el('small'); s.textContent = t.count; b.append(s); }
     b.onclick = () => goTag(t.name);
     cloud.append(b);
   }
-  $('main').replaceChildren(cloud);
+  nodes.push(cloud);
+  $('main').replaceChildren(...nodes);
 }
 
-/* ---------- Tag-Ansicht: Bilder-Cloud ---------- */
+/* ---------- Tag-Ansicht: Neu-Leiste + Bilder-Cloud ---------- */
 function renderTag(tag) {
   setChrome({ back: true, refresh: true, add: true, title: '#' + tag });
   const list = memes.filter(m => m.tag === tag).map(m => ({ m, score: m.lachen - m.laetsch }));
@@ -384,25 +455,33 @@ function renderTag(tag) {
     x.size = i === 0 ? maxS : minS + (maxS - minS) * Math.pow(0.6 * scoreN + 0.4 * rankN, 1.2);
   });
 
+  const nodes = [];
+  // Neue Memes oben, neueste zuerst
+  const fresh = list.map(x => x.m).filter(isNew).sort((a, b) => time(b) - time(a));
+  if (fresh.length) {
+    nodes.push(newBar(`🔔 <b>Neu für dich: ${fresh.length}</b>`, fresh));
+    const strip = el('div', 'strip');
+    for (const m of fresh) strip.append(tile(m));
+    nodes.push(strip);
+  }
   const cloud = el('div', 'imgcloud');
   for (const x of centerOrder(list)) {
     const { m } = x;
-    const b = el('button', 'tile' + (x === list[0] && list.length > 1 ? ' top' : ''));
-    b.style.width = b.style.height = Math.round(x.size) + 'px';
-    const img = el('img'); img.src = srcOf(m); img.alt = 'Meme'; img.loading = 'lazy';
-    const badge = el('span', 'badge');
-    badge.textContent = x.size > 120 ? `😂 ${m.lachen} · 😒 ${m.laetsch}` : (x.score > 0 ? '+' : '') + x.score;
-    b.append(img, badge);
-    b.onclick = () => openDetail(m);
-    cloud.append(b);
+    cloud.append(tile(m, {
+      size: x.size,
+      top: x === list[0] && list.length > 1,
+      badge: x.size > 120 ? `😂 ${m.lachen} · 😒 ${m.laetsch}` : (x.score > 0 ? '+' : '') + x.score
+    }));
   }
-  $('main').replaceChildren(cloud);
+  nodes.push(cloud);
+  $('main').replaceChildren(...nodes);
 }
 
 /* ---------- Detail + Bewertung ---------- */
 let detailMeme = null;
 function openDetail(m) {
   detailMeme = m;
+  markSeen([m.id]);
   $('detailImg').src = srcOf(m);
   updateReacts();
   $('detailOv').classList.add('open');
@@ -413,19 +492,36 @@ function updateReacts() {
   $('latschCount').textContent = m.laetsch;
   $('laughBtn').classList.toggle('chosen', v === 'lachen');
   $('latschBtn').classList.toggle('chosen', v === 'laetsch');
-  $('laughBtn').disabled = $('latschBtn').disabled = !!v;
+  $('laughBtn').classList.toggle('other', !!v && v !== 'lachen');
+  $('latschBtn').classList.toggle('other', !!v && v !== 'laetsch');
+  $('reactHint').textContent = v ? 'Nochmals tippen zum Entfernen, das andere tippen zum Wechseln' : '';
 }
+// Eine Reaktion pro Meme und Gerät. Gleiche nochmals tippen = entfernen, andere tippen = wechseln.
+let reacting = false;
 async function react(art, btn) {
   const m = detailMeme;
-  if (!m || votes[m.id]) return;
-  votes[m.id] = art; saveVotes(); m[art]++; updateReacts();
+  if (!m || reacting) return;
+  reacting = true;
+  const prev = votes[m.id] || null;
+  const before = { lachen: m.lachen, laetsch: m.laetsch };
+  if (prev) m[prev] = Math.max(0, m[prev] - 1);
+  if (prev === art) delete votes[m.id]; else { votes[m.id] = art; m[art]++; }
+  saveVotes(); updateReacts();
   btn.classList.remove('bump'); void btn.offsetWidth; btn.classList.add('bump');
   try {
-    const r = await api.rpc('meme_reagieren', { p_gruppe: gruppe, p_id: m.id, p_art: art });
+    let r = null;
+    if (prev) r = await api.rpc('meme_reaktion_entfernen', { p_gruppe: gruppe, p_id: m.id, p_art: prev });
+    if (prev !== art) r = await api.rpc('meme_reagieren', { p_gruppe: gruppe, p_id: m.id, p_art: art });
     if (r && r.id) { m.lachen = r.lachen; m.laetsch = r.laetsch; }
   } catch (e) {
-    m[art]--; delete votes[m.id]; saveVotes(); toast(e.message, 7000);
+    Object.assign(m, before);
+    if (prev) votes[m.id] = prev; else delete votes[m.id];
+    saveVotes();
+    toast(prev && /404/.test(e.message)
+      ? 'Entfernen funktioniert erst, wenn das SQL-Update in Supabase ausgeführt wurde.'
+      : e.message, 7000);
   }
+  reacting = false;
   if (detailMeme === m) updateReacts();
 }
 $('laughBtn').onclick = e => react('lachen', e.currentTarget);
@@ -518,7 +614,7 @@ $('savePost').onclick = async () => {
       await api.upload(bild, pendingBlob);
     } else bild = pendingLink;
     const m = await api.rpc('meme_posten', { p_gruppe: gruppe, p_tag: tag, p_bild: bild });
-    memes.unshift(m);
+    memes.unshift(m); markSeen([m.id]);
     closePost();
     if (currentTag === m.tag) route(); else goTag(m.tag);
   } catch (e) {
@@ -585,7 +681,7 @@ async function loadSamples() {
   for (const [tag, bg, emoji, top, bottom] of SAMPLES) {
     try {
       const m = await api.rpc('meme_posten', { p_gruppe: gruppe, p_tag: tag, p_bild: svgMeme(bg, emoji, top, bottom) });
-      if (m && m.id) { memes.unshift(m); n++; }
+      if (m && m.id) { memes.unshift(m); markSeen([m.id]); n++; }
       toast(`Beispiele werden geladen… ${n}/${SAMPLES.length}`, 10000);
     } catch (e) { toast(e.message, 7000); break; }
   }
